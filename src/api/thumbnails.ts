@@ -5,6 +5,7 @@ import type { ApiConfig } from "../config";
 import type { BunRequest } from "bun";
 import { BadRequestError, UserForbiddenError } from "./errors";
 import path from "node:path";
+import { randomBytes } from "node:crypto";
 
 export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
   const { videoId } = req.params as { videoId?: string };
@@ -22,11 +23,6 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
     throw new UserForbiddenError("Must own the video");
   }
 
-  const mimeType = req.headers.get("Content-Type");
-  if (mimeType !== `image/jpeg` && mimeType !== `image/png`) {
-    throw new BadRequestError("Image must be a jpeg or png");
-  }
-
   const MAX_UPLOAD_SIZE = 10 << 20;
   const formData = await req.formData();
   const thumbnail = formData.get("thumbnail");
@@ -38,8 +34,11 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
   }
 
   const mediaType = thumbnail.type;
+  if (mediaType !== `image/jpeg` && mediaType !== `image/png`) {
+    throw new BadRequestError("Image must be a jpeg or png");
+  }
   const imageData = await thumbnail.arrayBuffer();
-  const imageFileName = `${videoId}.${mediaType}`;
+  const imageFileName = `${randomBytes(32).toString("base64")}.${mediaType}`;
   const imagePath = path.join(cfg.assetsRoot, imageFileName);
 
   Bun.write(imagePath, imageData);
