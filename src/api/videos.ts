@@ -4,7 +4,7 @@ import { type ApiConfig } from "../config";
 import type { BunRequest } from "bun";
 import { BadRequestError, UserForbiddenError } from "./errors";
 import { getBearerToken, validateJWT } from "../auth";
-import { getVideo, updateVideo } from "../db/videos";
+import { getVideo, updateVideo, type Video } from "../db/videos";
 
 export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
   const MAX_UPLOAD_SIZE = 1 << 30; //1GB
@@ -50,12 +50,29 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
     type: mediaType,
   });
 
-  video.videoURL = `https://${cfg.s3Bucket}.s3.${cfg.s3Region}.amazonaws.com/${key}`;
+  video.videoURL = key;
   updateVideo(cfg.db, video);
 
   await Bun.file(tempPath).delete();
   await Bun.file(tempProcessedPath).delete();
-  return respondWithJSON(200, null);
+  const videoWithPresignedURL = dbVideoToSignedVideo(cfg, video);
+  return respondWithJSON(200, videoWithPresignedURL);
+}
+
+function generatePresignedURL(cfg: ApiConfig, key: string, expireTime: number) {
+  const presigned = cfg.s3Client.presign(key, {
+    expiresIn: expireTime,
+  });
+  return presigned;
+}
+
+export function dbVideoToSignedVideo(cfg: ApiConfig, video: Video) {
+  if (!video.videoURL) {
+    throw new Error("video url was not set. Cannot presign");
+  }
+  const presignURL = generatePresignedURL(cfg, video.videoURL, 3600);
+  video.videoURL = presignURL;
+  return video;
 }
 
 export async function processVideoForFastStart(inputFilePath: string) {
