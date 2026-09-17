@@ -50,29 +50,12 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
     type: mediaType,
   });
 
-  video.videoURL = key;
+  video.videoURL = `${cfg.s3CfDistribution}/${key}`;
   updateVideo(cfg.db, video);
 
   await Bun.file(tempPath).delete();
   await Bun.file(tempProcessedPath).delete();
-  const videoWithPresignedURL = dbVideoToSignedVideo(cfg, video);
-  return respondWithJSON(200, videoWithPresignedURL);
-}
-
-function generatePresignedURL(cfg: ApiConfig, key: string, expireTime: number) {
-  const presigned = cfg.s3Client.presign(key, {
-    expiresIn: expireTime,
-  });
-  return presigned;
-}
-
-export function dbVideoToSignedVideo(cfg: ApiConfig, video: Video) {
-  if (!video.videoURL) {
-    throw new Error("video url was not set. Cannot presign");
-  }
-  const presignURL = generatePresignedURL(cfg, video.videoURL, 3600);
-  video.videoURL = presignURL;
-  return video;
+  return respondWithJSON(200, null);
 }
 
 export async function processVideoForFastStart(inputFilePath: string) {
